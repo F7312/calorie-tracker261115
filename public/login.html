@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>登录 · 热量追踪</title>
+    <style>
+        :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+        * { box-sizing: border-box; }
+        body { min-height: 100vh; min-height: 100svh; margin: 0; display: grid; place-items: center; padding: 1rem; background: #0a0a0a; color: #fafafa; }
+        main { width: min(100%, 26rem); padding: clamp(1.4rem, 5vw, 2rem); border: 1px solid #2e2e2e; border-radius: 1rem; background: #171717; }
+        h1 { margin: 0 0 .55rem; font-size: 1.5rem; line-height: 1.35; }
+        p { margin: 0 0 1.5rem; font-size: .9rem; color: #b3b3b3; }
+        label { display: block; margin-bottom: .5rem; font-size: .9rem; }
+        input, button { display: block; width: 100%; padding: .72rem .82rem; border-radius: .55rem; font: inherit; }
+        input { background: #0a0a0a; color: #fafafa; border: 1px solid #525252; }
+        button { margin-top: 1rem; color: #052e23; background: #34d399; border: 1px solid transparent; font-weight: 650; cursor: pointer; }
+        button:hover { background: #6ee7b7; }
+        input:focus-visible, button:focus-visible { outline: 2px solid #6ee7b7; outline-offset: 3px; }
+        .message { margin: .65rem 0 0; color: #fda4af; }
+    </style>
+</head>
+<body>
+    <main>
+        <h1>热量缺口与日程追踪</h1>
+        <p>输入站点密码继续。</p>
+        <form action="/api/access" method="post">
+            <label for="site-password">站点密码</label>
+            <input id="site-password" name="password" type="password" autocomplete="current-password" maxlength="256" required autofocus>
+            <!-- access-message -->
+            <button type="submit">进入网页</button>
+        </form>
+    </main>
+</body>
+</html>

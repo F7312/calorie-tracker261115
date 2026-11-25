@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>动态热量缺口计算与日历追踪 (AI 增强版)</title>
+    <!-- 引入 Noto Sans SC 字体 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['"Noto Sans SC"', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+            background-color: #000000;
+            color: #ffffff;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #0a0a0a; }
+        ::-webkit-scrollbar-thumb { background: #262626; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #404040; }
+    </style>
+</head>
+<body class="bg-black text-white min-h-screen flex flex-col antialiased selection:bg-neutral-800 selection:text-white">
+
+    <!-- 顶部导航 / 状态栏 -->
+    <header class="border-b border-neutral-800 bg-neutral-950/80 backdrop-blur sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 min-h-16 flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+                <h1 class="font-bold tracking-wider text-lg text-neutral-100">热量缺口与日程追踪</h1>
+            </div>
+            <div class="flex flex-wrap items-center gap-2 sm:gap-4 text-sm text-neutral-400">
+                <div class="hidden sm:flex items-center space-x-1.5 bg-neutral-900 border border-neutral-700 px-3 py-1.5 rounded-lg text-xs">
+                    <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                    <span class="text-emerald-400 font-medium">AI 智算引擎已就绪</span>
+                </div>
+                <span id="current-date-display">2026-06-07</span>
+                <div class="flex items-center space-x-2 bg-neutral-900 border border-neutral-800 px-3 py-1.5 rounded-lg">
+                    <span class="text-xs">21:30 调试:</span>
+                    <input type="checkbox" id="debug-time-toggle" class="accent-emerald-500 cursor-pointer">
+                </div>
+                <form action="/api/access" method="post">
+                    <button type="submit" name="action" value="logout" class="rounded-lg border border-neutral-800 bg-neutral-900 px-3 py-1.5 text-xs text-neutral-200 hover:bg-neutral-800">退出</button>
+                </form>
+            </div>
+        </div>
+    </header>
+
+    <!-- 主体内容区 -->
+    <main class="max-w-7xl mx-auto px-4 py-6 flex-1 w-full space-y-6">
+
+        <!-- 模块一：当天消耗与摄入计算 -->
+        <section class="space-y-6">
+            
+            <!-- 1. 身体参数与静态底线 -->
+            <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-5 shadow-lg">
+                <h2 class="text-sm font-bold tracking-wider text-neutral-300 uppercase mb-4 flex items-center justify-between">
+                    <span>身体参数与计划基线</span>
+                    <span class="text-xs text-neutral-500 font-normal">三日循环动态适配中</span>
+                </h2>
+                <div class="grid grid-cols-2 sm:grid-cols-5 gap-4">
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">性别</label>
+                        <select id="user-gender" class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-neutral-600">
+                            <option value="male">男</option>
+                            <option value="female">女</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">身高 (cm)</label>
+                        <input type="number" id="user-height" value="175" min="1" step="any" class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-neutral-600">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">体重 (kg)</label>
+                        <input type="number" id="user-weight" value="89" min="1" step="any" class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-neutral-600">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">年龄 (岁)</label>
+                        <input type="number" id="user-age" value="30" min="19" step="1" class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-neutral-600">
+                    </div>
+                    <div>
+                        <label class="block text-xs text-neutral-400 mb-1">计划基线 (kcal)</label>
+                        <input type="number" id="user-baseline" value="2100" class="w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-neutral-600">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. 训练日类型选择与目标参数展示 -->
+            <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-5 shadow-lg space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div>
+                        <h2 class="text-sm font-bold tracking-wider text-neutral-300 uppercase">今日训练状态选择</h2>
+                        <p class="text-xs text-neutral-500 mt-0.5">选择后更新计划总消耗、营养素最低值和目标缺口</p>
+                    </div>
+                    <div class="inline-flex bg-neutral-950 border border-neutral-800 p-1 rounded-xl">
+                        <button onclick="setTrainingType('rest')" id="btn-type-rest" class="px-4 py-2 text-xs font-medium rounded-lg transition-all text-neutral-400 hover:text-white">休息/有氧 (+290)</button>
+                        <button onclick="setTrainingType('strength')" id="btn-type-strength" class="px-4 py-2 text-xs font-medium rounded-lg transition-all text-neutral-400 hover:text-white">力量训练 (+480)</button>
+                        <button onclick="setTrainingType('hiit')" id="btn-type-hiit" class="px-4 py-2 text-xs font-medium rounded-lg transition-all text-neutral-400 hover:text-white">HIIT/体能 (+700)</button>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2 border-t border-neutral-800/60">
+                    <div class="bg-neutral-950/60 border border-neutral-800/80 p-3 rounded-lg">
+                        <div class="text-xs text-neutral-500">计划总消耗 (TDEE)</div>
+                        <div id="stat-tdee" class="text-lg font-bold text-neutral-100 mt-1">2390 kcal</div>
+                    </div>
+                    <div class="bg-neutral-950/60 border border-neutral-800/80 p-3 rounded-lg">
+                        <div class="text-xs text-neutral-500">动态目标摄入</div>
+                        <div id="stat-target-intake" class="text-lg font-bold text-emerald-400 mt-1">1250 kcal</div>
+                    </div>
+                    <div class="bg-neutral-950/60 border border-neutral-800/80 p-3 rounded-lg">
+                        <div class="text-xs text-neutral-500">目标热量缺口</div>
+                        <div id="stat-target-deficit" class="text-lg font-bold text-amber-400 mt-1">-1140 kcal</div>
+                    </div>
+                    <div class="bg-neutral-950/60 border border-neutral-800/80 p-3 rounded-lg">
+                        <div class="text-xs text-neutral-500">营养素底线 (蛋白/碳水/脂肪)</div>
+                        <div id="stat-macros-baseline" class="text-xs font-medium text-neutral-300 mt-2">≥ 142g / ≥ 69g / ≥ 45g</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. 食物录入区 -->
+            <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-5 shadow-lg space-y-4">
+                <h2 class="text-sm font-bold tracking-wider text-neutral-300 uppercase">添加餐食记录 (AI 智能视觉视觉解析)</h2>
+                
+                <div class="space-y-3">
+                    <textarea id="food-input-text" rows="3" maxlength="4000" placeholder="例如：一片山姆购买的嘉顿全麦面包，3/5杯MUG杯的全脂牛奶，三小包members mark的卤汁牛腱..." class="w-full bg-neutral-950 border border-neutral-800 rounded-xl p-3 text-sm text-white placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none"></textarea>
+                    
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+                        <div class="flex items-center space-x-3">
+                            <label class="cursor-pointer bg-neutral-950 hover:bg-neutral-800 border border-neutral-800 px-4 py-2 rounded-xl text-xs text-neutral-300 transition flex items-center space-x-2">
+                                <svg class="w-4 h-4 text-neutral-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                                <span>上传餐前/餐后照片（最多 4 张）</span>
+                                <input type="file" id="food-images" multiple accept="image/*" class="hidden" onchange="handleImageUpload(event)">
+                            </label>
+                            <span id="image-count-badge" class="text-xs text-neutral-500">未选择图片</span>
+                        </div>
+                        
+                        <button onclick="parseFoodWithAI()" id="parse-btn" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-6 py-2.5 rounded-xl text-xs transition shadow flex items-center space-x-2">
+                            <span>AI 智能解析识别</span>
+                        </button>
+                    </div>
+                    <div id="image-preview-container" class="flex flex-wrap gap-2 pt-2"></div>
+                </div>
+            </div>
+
+            <!-- 4. 单餐识别表格 -->
+            <div id="single-meal-card" class="bg-neutral-900 border border-neutral-800 rounded-xl p-5 shadow-lg space-y-4 hidden">
+                <div class="flex items-center justify-between">
+                    <h2 class="text-sm font-bold tracking-wider text-neutral-300 uppercase">单餐识别表 (点击数字可手动微调)</h2>
+                    <span class="text-xs text-emerald-400">AI 解析完成</span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs border-collapse">
+                        <thead>
+                            <tr class="border-b border-neutral-800 text-neutral-500">
+                                <th class="py-2.5 px-3 font-medium">食物明细</th>
+                                <th class="py-2.5 px-3 font-medium">热量 (kcal)</th>
+                                <th class="py-2.5 px-3 font-medium">蛋白质 (g)</th>
+                                <th class="py-2.5 px-3 font-medium">碳水 (g)</th>
+                                <th class="py-2.5 px-3 font-medium">脂肪 (g)</th>
+                                <th class="py-2.5 px-3 font-medium text-right">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="single-meal-tbody" class="divide-y divide-neutral-800/50"></tbody>
+                        <tfoot>
+                            <tr class="border-t border-neutral-800 font-bold text-neutral-200">
+                                <td class="py-3 px-3">合计</td>
+                                <td id="single-total-cal" class="py-3 px-3">0</td>
+                                <td id="single-total-protein" class="py-3 px-3">0</td>
+                                <td id="single-total-carbs" class="py-3 px-3">0</td>
+                                <td id="single-total-fat" class="py-3 px-3">0</td>
+                                <td class="py-3 px-3 text-right"></td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div class="flex justify-end pt-2">
+                    <button id="commit-meal-btn" onclick="commitMealToToday()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-6 py-2.5 rounded-xl text-xs transition shadow disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed">
+                        加入今日累计
+                    </button>
+                </div>
+            </div>
+
+            <!-- 5. 今日累计摄入与目标进度汇总表 -->
+            <div class="bg-neutral-900 border border-neutral-800 rounded-xl p-5 shadow-lg space-y-5">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <h2 class="text-sm font-bold tracking-wider text-neutral-300">今日累计摄入与目标进度汇总表</h2>
+                    <span id="day-lock-badge" class="text-xs px-2.5 py-1 rounded-full bg-neutral-800 text-neutral-400">状态：未锁定</span>
+                </div>
+
+                <section aria-labelledby="today-meals-heading" class="space-y-2">
+                    <h3 id="today-meals-heading" class="text-sm font-semibold text-neutral-200">今日摄入</h3>
+                    <div id="today-meals-list" class="space-y-2"></div>
+                </section>
+
+                <section aria-labelledby="today-expenditure-heading" class="pt-4 border-t border-neutral-800 space-y-3">
+                    <h3 id="today-expenditure-heading" class="text-sm font-semibold text-neutral-200">今日消耗</h3>
+                    <div id="today-expenditure-list" class="space-y-2"></div>
+                    <form id="workout-form">
+                        <fieldset id="workout-fields" class="grid grid-cols-2 sm:grid-cols-[minmax(0,1fr)_7rem_7rem_8rem_auto] items-end gap-2">
+                            <label for="workout-name" class="col-span-2 sm:col-span-1 block text-xs text-neutral-400">训练项目
+                                <input id="workout-name" type="text" placeholder="例如：力量训练" maxlength="40" required class="mt-1 block w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white">
+                            </label>
+                            <label for="workout-time" class="block text-xs text-neutral-400">训练时间
+                                <input id="workout-time" type="time" required class="mt-1 block w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white">
+                            </label>
+                            <label for="workout-calories" class="block text-xs text-neutral-400">活动热量（kcal）
+                                <input id="workout-calories" type="number" min="1" step="1" inputmode="numeric" required class="mt-1 block w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white">
+                            </label>
+                            <label for="workout-steps" class="block text-xs text-neutral-400">已计入全天的训练步数
+                                <input id="workout-steps" type="number" min="0" step="1" inputmode="numeric" placeholder="选填" class="mt-1 block w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white">
+                            </label>
+                            <button type="submit" class="bg-neutral-800 hover:bg-neutral-700 text-neutral-100 px-4 py-2.5 rounded-lg text-xs font-medium">添加训练</button>
+                        </fieldset>
+                    </form>
+                </section>
+
+                <section aria-labelledby="today-summary-heading" class="pt-4 border-t border-neutral-800 space-y-3">
+                    <h3 id="today-summary-heading" class="text-sm font-semibold text-neutral-200">综合汇总</h3>
+                    <dl class="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+                        <div class="bg-neutral-950 border border-neutral-800 rounded-lg p-3">
+                            <dt class="text-neutral-400">累计摄入</dt>
+                            <dd id="summary-ing-cal" class="mt-1 text-base font-semibold text-emerald-400">0 kcal</dd>
+                        </div>
+                        <div class="bg-neutral-950 border border-neutral-800 rounded-lg p-3">
+                            <dt class="text-neutral-400">累计消耗</dt>
+                            <dd id="summary-exp-cal" class="mt-1 text-base font-semibold text-white">0 kcal</dd>
+                            <dd id="summary-exp-note" class="mt-1 text-neutral-500">暂计已记录的训练</dd>
+                        </div>
+                        <div class="bg-neutral-950 border border-neutral-800 rounded-lg p-3">
+                            <dt id="summary-balance-label" class="text-neutral-400">暂计缺口与盈余</dt>
+                            <dd id="summary-balance" class="mt-1 text-base font-semibold text-white">0 kcal</dd>
+                        </div>
+                        <div class="bg-neutral-950 border border-neutral-800 rounded-lg p-3">
+                            <dt class="text-neutral-400">剩余可摄入额度</dt>
+                            <dd id="summary-remain-cal" class="mt-1 text-base font-semibold text-white">0 kcal</dd>
+                            <dd id="summary-base-cal" class="mt-1 text-neutral-500"></dd>
+                        </div>
+                    </dl>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left text-xs border-collapse whitespace-nowrap">
+                            <thead>
+                                <tr class="border-b border-neutral-800 text-neutral-500">
+                                    <th scope="col" class="py-2 px-2 font-medium">营养素</th>
+                                    <th scope="col" class="py-2 px-2 font-medium">最低值</th>
+                                    <th scope="col" class="py-2 px-2 font-medium">已摄入</th>
+                                    <th scope="col" class="py-2 px-2 font-medium">摄入进度</th>
+                                    <th scope="col" class="py-2 px-2 font-medium">距最低值</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-neutral-800/60 text-neutral-200">
+                                <tr>
+                                    <th scope="row" class="py-2 px-2 font-medium">蛋白质</th>
+                                    <td id="summary-base-protein" class="py-2 px-2"></td>
+                                    <td id="summary-ing-protein" class="py-2 px-2"></td>
+                                    <td id="summary-pct-protein" class="py-2 px-2"></td>
+                                    <td id="summary-remain-protein" class="py-2 px-2 text-amber-400"></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row" class="py-2 px-2 font-medium">碳水化合物</th>
+                                    <td id="summary-base-carbs" class="py-2 px-2"></td>
+                                    <td id="summary-ing-carbs" class="py-2 px-2"></td>
+                                    <td id="summary-pct-carbs" class="py-2 px-2"></td>
+                                    <td id="summary-remain-carbs" class="py-2 px-2 text-amber-400"></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row" class="py-2 px-2 font-medium">脂肪</th>
+                                    <td id="summary-base-fat" class="py-2 px-2"></td>
+                                    <td id="summary-ing-fat" class="py-2 px-2"></td>
+                                    <td id="summary-pct-fat" class="py-2 px-2"></td>
+                                    <td id="summary-remain-fat" class="py-2 px-2 text-amber-400"></td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+
+                <div class="pt-4 border-t border-neutral-800 flex flex-col sm:flex-row sm:items-end justify-between gap-3">
+                    <div id="lock-hint" class="text-xs text-neutral-500" aria-live="polite">北京时间 21:30 后，输入当天步数即可入账。</div>
+                    <div class="flex items-end gap-2 sm:gap-3">
+                        <label for="day-steps" class="min-w-0 w-32 block text-xs text-neutral-400">当天步数
+                            <input id="day-steps" type="number" min="0" step="1" inputmode="numeric" required aria-describedby="lock-hint" placeholder="输入步数" class="mt-1 block w-full bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 text-white">
+                        </label>
+                        <button id="commit-day-btn" onclick="commitDailyReport()" disabled class="shrink-0 bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 sm:px-6 py-2.5 rounded-lg text-xs transition disabled:bg-neutral-800 disabled:text-neutral-500 disabled:cursor-not-allowed">锁定并生成日报</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. 晚间日报与分析报告 -->
+            <div id="daily-report-section" class="bg-neutral-900 border border-neutral-800 rounded-xl p-5 shadow-lg space-y-4 hidden">
+                <h2 class="text-sm font-bold tracking-wider text-emerald-400 uppercase flex items-center justify-between">
+                    <span>全天数据日报</span>
+                    <span class="text-xs text-neutral-500 font-normal" id="report-date-tag">2026-06-07</span>
+                </h2>
+                <div id="report-content" class="space-y-4 text-xs text-neutral-300 leading-relaxed bg-neutral-950 p-4 rounded-xl border border-neutral-800"></div>
+            </div>
+
+        </section>
+
+        <!-- 模块二：热量缺口日历打卡 -->
+        <section class="bg-neutral-900 border border-neutral-800 rounded-xl p-5 shadow-lg space-y-4">
+            <div class="flex items-center justify-between">
+                <h2 class="text-sm font-bold tracking-wider text-neutral-300 uppercase">热量缺口日历打卡</h2>
+                <div class="flex items-center space-x-3 text-xs text-neutral-400">
+                    <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span><span>达成缺口</span></span>
+                    <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span><span>未达标</span></span>
+                    <span class="flex items-center space-x-1"><span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block"></span><span>盈余/超标</span></span>
+                </div>
+            </div>
+
+            <div class="flex items-center justify-between gap-3">
+                <span id="calendar-month" class="text-sm font-medium text-neutral-200"></span>
+                <div class="flex gap-2">
+                    <button type="button" onclick="changeCalendarMonth(-1)" class="bg-neutral-800 hover:bg-neutral-700 rounded-lg px-3 py-1.5 text-xs text-neutral-300">上个月</button>
+                    <button type="button" onclick="changeCalendarMonth(1)" class="bg-neutral-800 hover:bg-neutral-700 rounded-lg px-3 py-1.5 text-xs text-neutral-300">下个月</button>
+                </div>
+            </div>
+            <div class="grid grid-cols-7 gap-2 text-center text-xs font-medium text-neutral-500 pb-2 border-b border-neutral-800">
+                <div>一</div><div>二</div><div>三</div><div>四</div><div>五</div><div>六</div><div>日</div>
+            </div>
+
+            <div id="calendar-grid" class="grid grid-cols-7 gap-2"></div>
+        </section>
+
+    </main>
+
+    <!-- 历史详情弹窗 -->
+    <div id="history-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-neutral-900 border border-neutral-800 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div class="flex items-center justify-between border-b border-neutral-800 pb-3">
+                <h3 id="modal-date-title" class="text-sm font-bold text-white">日期详情</h3>
+                <button onclick="closeModal()" class="text-neutral-400 hover:text-white text-sm">✕</button>
+            </div>
+            <div id="modal-content" class="space-y-3 text-xs text-neutral-300 max-h-96 overflow-y-auto"></div>
+            <div class="flex justify-end pt-2 border-t border-neutral-800">
+                <button onclick="closeModal()" class="bg-neutral-800 hover:bg-neutral-700 text-white px-4 py-2 rounded-xl text-xs">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 核心逻辑 -->
+    <script>
+        function beijingTimestamp() {
+            return new Date(Date.now() + 8 * 3600000).toISOString();
+        }
+
+        const currentDateStr = beijingTimestamp().slice(0, 10);
+        let [calendarYear, calendarMonth] = currentDateStr.split('-').map(Number);
+        document.getElementById('current-date-display').innerText = currentDateStr;
+        document.getElementById('report-date-tag').innerText = currentDateStr;
+
+        const trainingConfigs = {
+            rest: { name: '休息恢复日', addTdee: 290, targetDeficit: 1140, protein: 142, carbs: 69, fat: 45 },
+            strength: { name: '力量训练日', addTdee: 480, targetDeficit: 1185, protein: 150, carbs: 90, fat: 48 },
+            hiit: { name: 'HIIT/体能日', addTdee: 700, targetDeficit: 1275, protein: 150, carbs: 114, fat: 52 }
+        };
+        const profileFields = ['gender', 'height', 'weight', 'age', 'baseline'];
+
+        const appData = JSON.parse(localStorage.getItem('calorie_tracker_data') || '{}');
+        const day = appData[currentDateStr] ??= { trainingType: 'rest', meals: [], workouts: [], committed: false, report: null };
+        day.meals ??= [];
+        day.workouts ??= [];
+        let currentTrainingType = day.trainingType || 'rest';
+
+        const MAX_MEAL_IMAGES = 4;
+        const MAX_MEAL_REQUEST_BYTES = 4_000_000;
+        let currentParsedItems = [];
+        let uploadedImagesBase64 = [];
+        let imageUpload = null;
+
+        window.addEventListener('pageshow', event => {
+            if (event.persisted) window.location.reload();
+        });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const profile = day.report?.profile ?? day.profile;
+            profileFields.forEach(field => {
+                const input = document.getElementById(`user-${field}`);
+                const savedValue = profile?.[field] ?? (field === 'baseline' ? day.report?.baseline ?? day.baseline : undefined);
+                if (savedValue !== undefined && savedValue !== null) input.value = savedValue;
+                input.addEventListener('input', () => {
+                    if (day.committed) return;
+                    day.profile ??= {};
+                    day.profile[field] = input.value;
+                    saveData();
+                    updateTrainingDisplay();
+                    checkTimeLock();
+                });
+            });
+            setTrainingType(currentTrainingType);
+            renderTodayMeals();
+            renderTodayExpenditure();
+            renderCalendar();
+
+            const stepsInput = document.getElementById('day-steps');
+            stepsInput.value = day.report?.steps ?? day.stepCount ?? '';
+            stepsInput.addEventListener('input', () => {
+                if (day.committed) return;
+                day.stepCount = readStepCount();
+                saveData();
+                checkTimeLock();
+            });
+            document.getElementById('workout-time').value = beijingTimestamp().slice(11, 16);
+            document.getElementById('workout-form').addEventListener('submit', addWorkout);
+            checkTimeLock();
+
+            document.getElementById('debug-time-toggle').addEventListener('change', checkTimeLock);
+            window.setInterval(() => {
+                if (!day.committed) checkTimeLock();
+            }, 30_000);
+        });
+
+        function setTrainingType(type) {
+            if (day.committed && type !== currentTrainingType) return;
+            currentTrainingType = type;
+            if (day.trainingType !== type) {
+                day.trainingType = type;
+                saveData();
+            }
+            ['rest', 'strength', 'hiit'].forEach(t => {
+                const btn = document.getElementById(`btn-type-${t}`);
+                btn.disabled = day.committed;
+                if (t === type) {
+                    btn.className = "px-4 py-2 text-xs font-medium rounded-lg transition-all bg-neutral-800 text-white shadow";
+                } else {
+                    btn.className = "px-4 py-2 text-xs font-medium rounded-lg transition-all text-neutral-400 hover:text-white";
+                }
+            });
+            updateTrainingDisplay();
+        }
+
+        function readBodyProfile() {
+            const gender = document.getElementById('user-gender').value;
+            const weight = document.getElementById('user-weight').valueAsNumber;
+            const height = document.getElementById('user-height').valueAsNumber;
+            const age = document.getElementById('user-age').valueAsNumber;
+            if (!(weight > 0 && height > 0 && Number.isSafeInteger(age) && age >= 19)) return null;
+
+            const female = gender === 'female';
+            const restingCalories = 10 * weight + 6.25 * height - 5 * age + (female ? -161 : 5);
+            const strideLengthCm = 34.7 - 0.30 * age + 0.76 * height - 0.15 * weight - (female ? 3.33 : 0);
+            if (!Number.isFinite(restingCalories) || restingCalories <= 0 || strideLengthCm <= 0) return null;
+            return { gender, height, weight, age, restingCalories, stepLengthM: strideLengthCm / 200 };
+        }
+
+        function estimateRoutineExpenditure(profile, routineSteps) {
+            const distanceKm = routineSteps * profile.stepLengthM / 1000;
+            // ACSM horizontal component: 0.1 mL O₂/kg/m, using about 5 kcal per liter of oxygen.
+            const walkingCalories = roundNutrient(0.5 * profile.weight * distanceKm);
+            const restingCalories = roundNutrient(profile.restingCalories);
+            return { restingCalories, walkingCalories, distanceKm, total: roundNutrient(restingCalories + walkingCalories) };
+        }
+
+        function updateTrainingDisplay() {
+            const config = trainingConfigs[currentTrainingType];
+            const targetIntake = getTargetIntake(config);
+            const tdee = targetIntake + config.targetDeficit;
+
+            document.getElementById('stat-tdee').innerText = `${Math.round(tdee)} kcal`;
+            document.getElementById('stat-target-intake').innerText = `${Math.round(targetIntake)} kcal`;
+            document.getElementById('stat-target-deficit').innerText = `-${config.targetDeficit} kcal`;
+            document.getElementById('stat-macros-baseline').innerText = `≥ ${config.protein}g / ≥ ${config.carbs}g / ≥ ${config.fat}g`;
+            updateSummaryTable();
+        }
+
+        function getBaseline() {
+            return parseFloat(document.getElementById('user-baseline').value) || 2100;
+        }
+
+        function getTargetIntake(config) {
+            if (day.committed && day.report) {
+                return day.report.targetIntake ?? day.report.tdee - config.targetDeficit;
+            }
+            return getBaseline() + config.addTdee - config.targetDeficit;
+        }
+
+        async function handleImageUpload(e) {
+            const files = Array.from(e.target.files);
+            imageUpload = null;
+            uploadedImagesBase64 = [];
+            const badge = document.getElementById('image-count-badge');
+            const container = document.getElementById('image-preview-container');
+            container.replaceChildren();
+            badge.innerText = '未选择图片';
+            if (!files.length) return;
+            if (files.length > MAX_MEAL_IMAGES) {
+                e.target.value = '';
+                alert(`一次最多选择 ${MAX_MEAL_IMAGES} 张餐食照片。`);
+                return;
+            }
+
+            badge.innerText = '正在处理图片…';
+            const upload = Promise.all(files.map(prepareMealImage));
+            imageUpload = upload;
+            try {
+                const images = await upload;
+                if (imageUpload !== upload) return;
+                uploadedImagesBase64 = images.map(image => image.split(',')[1]);
+                images.forEach(source => {
+                    const img = document.createElement('img');
+                    img.src = source;
+                    img.alt = '餐食照片预览';
+                    img.className = "w-16 h-16 object-cover rounded-lg border border-neutral-800";
+                    container.appendChild(img);
+                });
+                badge.innerText = `已选 ${images.length} 张图片`;
+            } catch {
+                if (imageUpload !== upload) return;
+                e.target.value = '';
+                badge.innerText = '未选择图片';
+                alert('无法读取照片，请尝试 JPEG、PNG 或 WebP 格式。');
+            } finally {
+                if (imageUpload === upload) imageUpload = null;
+            }
+        }
+
+        async function prepareMealImage(file) {
+            const source = URL.createObjectURL(file);
+            try {
+                const image = new Image();
+                image.src = source;
+                await image.decode();
+
+                const scale = Math.min(1, 1600 / Math.max(image.naturalWidth, image.naturalHeight));
+                const canvas = document.createElement('canvas');
+                canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+                canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+                const context = canvas.getContext('2d');
+                context.fillStyle = '#fff';
+                context.fillRect(0, 0, canvas.width, canvas.height);
+                context.drawImage(image, 0, 0, canvas.width, canvas.height);
+                return canvas.toDataURL('image/jpeg', 0.8);
+            } finally {
+                URL.revokeObjectURL(source);
+            }
+        }
+
+        async function parseFoodWithAI() {
+            if (imageUpload) {
+                alert('照片正在处理，请稍后再试。');
+                return;
+            }
+            const text = document.getElementById('food-input-text').value.trim();
+            if (!text && uploadedImagesBase64.length === 0) {
+                alert('请输入食物详情或上传餐食照片');
+                return;
+            }
+            const body = JSON.stringify({ text, images: uploadedImagesBase64 });
+            if (new TextEncoder().encode(body).byteLength > MAX_MEAL_REQUEST_BYTES) {
+                alert('照片总大小超出限制，请减少图片数量后重试。');
+                return;
+            }
+
+            const btn = document.getElementById('parse-btn');
+            btn.innerText = "AI 正在深度解析...";
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/api/analyze-meal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body
+                });
+                if (response.status === 401) {
+                    window.location.assign('/');
+                    return;
+                }
+                const data = await response.json().catch(() => null);
+                if (!response.ok) {
+                    const message = response.status === 413
+                        ? '照片总大小超出限制，请减少图片数量后重试。'
+                        : `AI 服务暂时不可用（HTTP ${response.status}）。`;
+                    throw new Error(data?.error || message);
+                }
+                if (!Array.isArray(data?.items) || !data.items.length) {
+                    throw new Error('未收到有效的餐食识别结果，请重试。');
+                }
+                currentParsedItems = data.items;
+                renderSingleMealTable();
+                document.getElementById('single-meal-card').classList.remove('hidden');
+            } catch (err) {
+                alert('AI 解析失败：' + err.message);
+            } finally {
+                btn.innerText = "AI 智能解析识别";
+                btn.disabled = false;
+            }
+        }
+
+        function renderSingleMealTable() {
+            const tbody = document.getElementById('single-meal-tbody');
+            tbody.innerHTML = '';
+            let totalCal = 0, totalPro = 0, totalCarbs = 0, totalFat = 0;
+
+            currentParsedItems.forEach((item, index) => {
+                totalCal += item.cal;
+                totalPro += item.protein;
+                totalCarbs += item.carbs;
+                totalFat += item.fat;
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-neutral-800/40 transition";
+                tr.innerHTML = `
+                    <td class="py-2.5 px-3 text-white font-medium"><input type="text" onchange="updateParsedItemName(${index}, this.value)" class="w-full bg-neutral-950 border border-neutral-800 rounded px-2 py-1 text-white"></td>
+                    <td class="py-2.5 px-3"><input type="number" value="${item.cal}" onchange="updateParsedItem(${index}, 'cal', this.value)" class="w-16 bg-neutral-950 border border-neutral-800 rounded px-1.5 py-1 text-white"></td>
+                    <td class="py-2.5 px-3"><input type="number" step="0.1" value="${item.protein}" onchange="updateParsedItem(${index}, 'protein', this.value)" class="w-16 bg-neutral-950 border border-neutral-800 rounded px-1.5 py-1 text-white"></td>
+                    <td class="py-2.5 px-3"><input type="number" step="0.1" value="${item.carbs}" onchange="updateParsedItem(${index}, 'carbs', this.value)" class="w-16 bg-neutral-950 border border-neutral-800 rounded px-1.5 py-1 text-white"></td>
+                    <td class="py-2.5 px-3"><input type="number" step="0.1" value="${item.fat}" onchange="updateParsedItem(${index}, 'fat', this.value)" class="w-16 bg-neutral-950 border border-neutral-800 rounded px-1.5 py-1 text-white"></td>
+                    <td class="py-2.5 px-3 text-right"><button onclick="removeParsedItem(${index})" class="text-neutral-500 hover:text-rose-400">✕</button></td>
+                `;
+                tr.querySelector('input[type="text"]').value = item.name;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('single-total-cal').innerText = Math.round(totalCal * 10) / 10;
+            document.getElementById('single-total-protein').innerText = (Math.round(totalPro * 10) / 10) + 'g';
+            document.getElementById('single-total-carbs').innerText = (Math.round(totalCarbs * 10) / 10) + 'g';
+            document.getElementById('single-total-fat').innerText = (Math.round(totalFat * 10) / 10) + 'g';
+        }
+
+        function updateParsedItemName(index, val) { currentParsedItems[index].name = val; }
+        function updateParsedItem(index, field, value) { currentParsedItems[index][field] = parseFloat(value) || 0; renderSingleMealTable(); }
+        function removeParsedItem(index) {
+            currentParsedItems.splice(index, 1);
+            if (currentParsedItems.length === 0) document.getElementById('single-meal-card').classList.add('hidden');
+            else renderSingleMealTable();
+        }
+
+        function commitMealToToday() {
+            if (day.committed) return alert('今日数据已锁定入账');
+            if (currentParsedItems.length === 0) return;
+
+            day.meals.push({
+                id: Date.now(),
+                time: beijingTimestamp().slice(11, 16),
+                items: [...currentParsedItems]
+            });
+            saveData();
+            currentParsedItems = [];
+            uploadedImagesBase64 = [];
+            imageUpload = null;
+            document.getElementById('food-input-text').value = '';
+            document.getElementById('food-images').value = '';
+            document.getElementById('image-preview-container').innerHTML = '';
+            document.getElementById('image-count-badge').innerText = '未选择图片';
+            document.getElementById('single-meal-card').classList.add('hidden');
+
+            renderTodayMeals();
+            updateSummaryTable();
+        }
+
+        function renderTodayMeals() {
+            const listEl = document.getElementById('today-meals-list');
+            const meals = day.meals.map((meal, index) => ({ meal, index }))
+                .sort((a, b) => (a.meal.id ?? 0) - (b.meal.id ?? 0));
+            if (meals.length === 0) {
+                listEl.innerHTML = '<div class="text-xs text-neutral-600 italic">暂无记录，请在上方添加并加入累计</div>';
+                return;
+            }
+            listEl.innerHTML = '';
+            meals.forEach(({ meal, index }, position) => {
+                const intake = sumIntake(meal.items);
+                const div = document.createElement('div');
+                div.className = "bg-neutral-950 border border-neutral-800/80 p-3 rounded-lg flex items-center justify-between text-xs";
+                div.innerHTML = `
+                    <div class="space-y-1">
+                        <div class="text-neutral-400 font-medium" data-meal-title></div>
+                        <div class="text-neutral-200" data-meal-items></div>
+                    </div>
+                    <div class="flex items-center space-x-4">
+                        <div class="text-right text-neutral-300">
+                            <div>${roundNutrient(intake.cal)} kcal</div>
+                            <div class="text-[10px] text-neutral-500">蛋白 ${roundNutrient(intake.protein)}g · 碳水 ${roundNutrient(intake.carbs)}g · 脂肪 ${roundNutrient(intake.fat)}g</div>
+                        </div>
+                        ${!day.committed ? `<button aria-label="删除第 ${position + 1} 餐" onclick="deleteTodayMeal(${index})" class="text-neutral-500 hover:text-rose-400">✕</button>` : ''}
+                    </div>
+                `;
+                div.querySelector('[data-meal-title]').textContent = `${meal.time} · 第 ${position + 1} 餐`;
+                div.querySelector('[data-meal-items]').textContent = meal.items.map(i => `${i.name} (${i.cal}kcal)`).join(', ');
+                listEl.appendChild(div);
+            });
+        }
+
+        function deleteTodayMeal(index) {
+            if (day.committed) return;
+            day.meals.splice(index, 1);
+            saveData();
+            renderTodayMeals();
+            updateSummaryTable();
+        }
+
+        function addWorkout(event) {
+            event.preventDefault();
+            if (day.committed) return;
+
+            const form = event.currentTarget;
+            const nameInput = document.getElementById('workout-name');
+            const timeInput = document.getElementById('workout-time');
+            const name = nameInput.value.trim();
+            const calories = document.getElementById('workout-calories').valueAsNumber;
+            const stepsInput = document.getElementById('workout-steps');
+            const steps = stepsInput.value === '' ? 0 : stepsInput.valueAsNumber;
+            if (!name || !timeInput.value || !Number.isSafeInteger(calories) || calories <= 0 || !Number.isSafeInteger(steps) || steps < 0) {
+                alert('请输入训练项目、时间和活动热量。训练步数可留空，填写时应为非负整数。');
+                return;
+            }
+            day.workouts.push({ name, time: timeInput.value, calories, steps });
+            saveData();
+            form.reset();
+            timeInput.value = beijingTimestamp().slice(11, 16);
+            renderTodayExpenditure();
+            updateSummaryTable();
+            checkTimeLock();
+        }
+
+        function deleteWorkout(index) {
+            if (day.committed) return;
+            day.workouts.splice(index, 1);
+            saveData();
+            renderTodayExpenditure();
+            updateSummaryTable();
+            checkTimeLock();
+        }
+
+        function renderTodayExpenditure() {
+            const list = document.getElementById('today-expenditure-list');
+            list.replaceChildren();
+            day.workouts.map((workout, index) => ({ workout, index }))
+                .sort((a, b) => a.workout.time.localeCompare(b.workout.time))
+                .forEach(({ workout, index }, position) => {
+                    const row = document.createElement('div');
+                    row.className = 'bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 flex items-center justify-between gap-3 text-xs';
+                    row.innerHTML = `
+                        <div data-workout-title class="min-w-0 break-words text-neutral-300"></div>
+                        <div class="flex items-center shrink-0 gap-3 text-neutral-200">
+                            <span>${workout.calories} kcal</span>
+                            ${day.committed ? '' : `<button aria-label="删除第 ${position + 1} 次训练" onclick="deleteWorkout(${index})" class="text-neutral-500 hover:text-rose-400">✕</button>`}
+                        </div>
+                    `;
+                    const recordedSteps = workout.steps ? ` · ${workout.steps.toLocaleString('zh-CN')} 步计入全天` : '';
+                    row.querySelector('[data-workout-title]').textContent = `${workout.time} · ${workout.name}${recordedSteps}`;
+                    list.appendChild(row);
+                });
+            if (day.committed && Number.isFinite(day.report?.routineCalories)) {
+                const row = document.createElement('div');
+                row.className = 'bg-neutral-950 border border-neutral-800 rounded-lg px-3 py-2 flex items-center justify-between gap-3 text-xs text-neutral-200';
+                row.innerHTML = `
+                    <div>
+                        <div>日常规消耗 · ${(day.report.routineSteps ?? day.report.steps).toLocaleString('zh-CN')} 步</div>
+                        ${day.report.routine ? `<div class="mt-1 text-neutral-500">静息 ${day.report.routine.restingCalories} kcal · 步行净消耗 ${day.report.routine.walkingCalories} kcal</div>` : ''}
+                    </div>
+                    <span class="shrink-0">${roundNutrient(day.report.routineCalories)} kcal</span>
+                `;
+                list.appendChild(row);
+            } else if (!day.workouts.length) {
+                const message = document.createElement('p');
+                message.className = 'text-xs text-neutral-500';
+                message.textContent = day.committed ? '这份历史日报保留了累计消耗。' : '暂无训练记录，日常规消耗会在结账后显示。';
+                list.appendChild(message);
+            }
+        }
+
+        function sumIntake(items) {
+            const totals = { cal: 0, protein: 0, carbs: 0, fat: 0 };
+            for (const item of items) {
+                for (const key of Object.keys(totals)) totals[key] += Number(item[key]) || 0;
+            }
+            return totals;
+        }
+
+        function roundNutrient(value) { return Math.round(value * 10) / 10; }
+
+        function formatEnergyBalance(deficit) {
+            const rounded = roundNutrient(deficit);
+            if (rounded === 0) return '平衡 · 0 kcal';
+            return `${rounded > 0 ? '缺口' : '盈余'} ${Math.abs(rounded)} kcal`;
+        }
+
+        function updateSummaryTable() {
+            const config = trainingConfigs[currentTrainingType];
+            const report = day.committed ? day.report : null;
+            const intake = report
+                ? { cal: report.ingCal, protein: report.protein, carbs: report.carbs, fat: report.fat }
+                : sumIntake(day.meals.flatMap(meal => meal.items));
+            const expenditure = report?.tdee ?? getWorkoutCalories();
+            const balance = report?.actualDeficit ?? expenditure - intake.cal;
+            const targetIntake = getTargetIntake(config);
+
+            document.getElementById('summary-ing-cal').innerText = `${roundNutrient(intake.cal)} kcal`;
+            document.getElementById('summary-exp-cal').innerText = `${roundNutrient(expenditure)} kcal`;
+            document.getElementById('summary-exp-note').innerText = day.committed ? '已结账 · 估算' : '暂计已记录的训练';
+            document.getElementById('summary-balance-label').innerText = day.committed ? '缺口与盈余' : '暂计缺口与盈余';
+            const balanceElement = document.getElementById('summary-balance');
+            balanceElement.innerText = formatEnergyBalance(balance);
+            balanceElement.className = `mt-1 text-base font-semibold ${balance > 0 ? 'text-emerald-400' : balance < 0 ? 'text-rose-400' : 'text-white'}`;
+            document.getElementById('summary-base-cal').innerText = `目标 ${roundNutrient(targetIntake)} kcal`;
+            document.getElementById('summary-remain-cal').innerText = `${Math.max(0, roundNutrient(targetIntake - intake.cal))} kcal`;
+
+            ['protein', 'carbs', 'fat'].forEach(key => {
+                const minimum = report?.macroMinimums?.[key] ?? config[key];
+                document.getElementById(`summary-base-${key}`).innerText = `${minimum}g`;
+                document.getElementById(`summary-ing-${key}`).innerText = `${roundNutrient(intake[key])}g`;
+                document.getElementById(`summary-pct-${key}`).innerText = `${Math.round(intake[key] / minimum * 100)}%`;
+                document.getElementById(`summary-remain-${key}`).innerText = `${Math.max(0, roundNutrient(minimum - intake[key]))}g`;
+            });
+        }
+
+        function getWorkoutCalories() {
+            return day.workouts.reduce((total, workout) => total + workout.calories, 0);
+        }
+
+        function getWorkoutSteps() {
+            return day.workouts.reduce((total, workout) => total + (workout.steps ?? 0), 0);
+        }
+
+        function readStepCount() {
+            const steps = document.getElementById('day-steps').valueAsNumber;
+            return Number.isSafeInteger(steps) && steps >= 0 ? steps : null;
+        }
+
+        function isReportTime() {
+            return document.getElementById('debug-time-toggle').checked || beijingTimestamp().slice(11, 16) >= '21:30';
+        }
+
+        function checkTimeLock() {
+            const btn = document.getElementById('commit-day-btn');
+            const badge = document.getElementById('day-lock-badge');
+            const hint = document.getElementById('lock-hint');
+            const reportTime = isReportTime();
+            const steps = readStepCount();
+            const workoutSteps = getWorkoutSteps();
+            const profile = readBodyProfile();
+            const ready = reportTime && steps !== null && steps >= workoutSteps && profile !== null;
+            btn.disabled = day.committed || !ready;
+            document.getElementById('day-steps').disabled = day.committed;
+            document.getElementById('workout-form').classList.toggle('hidden', day.committed);
+            document.getElementById('workout-fields').disabled = day.committed;
+            document.getElementById('commit-meal-btn').disabled = day.committed;
+            profileFields.forEach(field => { document.getElementById(`user-${field}`).disabled = day.committed; });
+
+            const badgeBase = 'text-xs px-2.5 py-1 rounded-full';
+            badge.className = day.committed || ready
+                ? badgeBase + ' bg-emerald-950 text-emerald-400 border border-emerald-800'
+                : badgeBase + ' bg-neutral-800 text-neutral-400';
+            if (day.committed) {
+                btn.innerText = '今日已完成入账';
+                badge.innerText = '状态：已锁定入账';
+                hint.innerText = '今日数据已锁定，日报已同步至日历。';
+                document.getElementById('daily-report-section').classList.remove('hidden');
+                renderDailyReportContent();
+            } else if (!reportTime) {
+                badge.innerText = '状态：未到入账时间';
+                hint.innerText = '北京时间 21:30 后，输入当天步数即可入账。';
+            } else if (steps === null) {
+                badge.innerText = '状态：待输入步数';
+                hint.innerText = '请输入当天的非负整数步数。没有步行时可填 0。';
+            } else if (steps < workoutSteps) {
+                badge.innerText = '状态：请核对步数';
+                hint.innerText = `全天步数不得小于已记录的训练步数（${workoutSteps.toLocaleString('zh-CN')} 步）。`;
+            } else if (!profile) {
+                badge.innerText = '状态：待核对身体参数';
+                hint.innerText = '请填写有效的身高、体重和年龄。此估算适用于 19 岁及以上的成人。';
+            } else {
+                badge.innerText = '状态：可入账';
+                hint.innerText = '步数已填写，可以生成日报。';
+            }
+        }
+
+        function commitDailyReport() {
+            const steps = readStepCount();
+            const workoutSteps = getWorkoutSteps();
+            const profile = readBodyProfile();
+            if (day.committed || !isReportTime() || !profile || steps === null || steps < workoutSteps) return;
+
+            const config = trainingConfigs[currentTrainingType];
+            const intake = sumIntake(day.meals.flatMap(meal => meal.items));
+            const workoutCalories = getWorkoutCalories();
+            const baseline = getBaseline();
+            const routineSteps = steps - workoutSteps;
+            const routine = estimateRoutineExpenditure(profile, routineSteps);
+            const routineCalories = routine.total;
+            const tdee = roundNutrient(workoutCalories + routineCalories);
+            const actualDeficit = roundNutrient(tdee - intake.cal);
+            day.report = {
+                tdee, ingCal: intake.cal, actualDeficit, steps, workoutSteps, routineSteps, baseline, workoutCalories, routineCalories, routine,
+                profile: { gender: profile.gender, height: profile.height, weight: profile.weight, age: profile.age, baseline },
+                weeklyLossKg: ((actualDeficit * 7) / 7700).toFixed(2),
+                protein: intake.protein, carbs: intake.carbs, fat: intake.fat,
+                targetDeficit: config.targetDeficit,
+                targetIntake: getTargetIntake(config),
+                macroMinimums: { protein: config.protein, carbs: config.carbs, fat: config.fat }
+            };
+            day.stepCount = steps;
+            day.committed = true;
+            saveData();
+            setTrainingType(currentTrainingType);
+            renderTodayMeals();
+            renderTodayExpenditure();
+            checkTimeLock();
+            renderCalendar();
+        }
+
+        function renderDailyReportContent() {
+            const rep = day.report;
+            if (!rep) return;
+            const projectedChange = Number(rep.weeklyLossKg);
+            document.getElementById('report-content').innerHTML = `
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 pb-3 border-b border-neutral-800">
+                    <div><span class="text-neutral-500">估算总消耗</span> <span class="text-white font-medium">${roundNutrient(rep.tdee)} kcal</span></div>
+                    <div><span class="text-neutral-500">实际摄入热量</span> <span class="text-white font-medium">${roundNutrient(rep.ingCal)} kcal</span></div>
+                    <div><span class="text-neutral-500">热量收支</span> <span class="text-amber-400 font-bold">${formatEnergyBalance(rep.actualDeficit)}</span></div>
+                    <div><span class="text-neutral-500">估算每周体重变化</span> <span class="text-neutral-200 font-medium">${projectedChange > 0 ? '−' : projectedChange < 0 ? '+' : ''}${Math.abs(projectedChange)} kg</span></div>
+                </div>
+                ${Number.isFinite(rep.steps) ? `<p>全天 ${rep.steps.toLocaleString('zh-CN')} 步 · 其中训练 ${(rep.workoutSteps ?? 0).toLocaleString('zh-CN')} 步 · 训练消耗 ${rep.workoutCalories} kcal · 日常规消耗 ${rep.routineCalories} kcal</p>` : ''}
+                ${rep.routine ? `<p class="text-neutral-400">日常步行约 ${rep.routine.distanceKm.toFixed(2)} km，按平地步行估算。静息能耗 ${rep.routine.restingCalories} kcal，步行净消耗 ${rep.routine.walkingCalories} kcal。</p>` : ''}
+                <div class="space-y-2 pt-2">
+                    <div class="text-white font-medium">三大营养素摄入</div>
+                    <p class="text-neutral-400">蛋白质 ${roundNutrient(rep.protein)}g · 碳水化合物 ${roundNutrient(rep.carbs)}g · 脂肪 ${roundNutrient(rep.fat)}g</p>
+                </div>
+                <div class="space-y-2 pt-2">
+                    <div class="text-white font-medium">🎯 次日饮食微调建议：</div>
+                    <p class="text-neutral-400">基于今日实际缺口与体能消耗反馈，明日建议保持高蛋白摄入并根据训练日类型平稳调控碳水。</p>
+                </div>
+            `;
+        }
+
+        function changeCalendarMonth(offset) {
+            const shownMonth = new Date(calendarYear, calendarMonth - 1 + offset, 1);
+            calendarYear = shownMonth.getFullYear();
+            calendarMonth = shownMonth.getMonth() + 1;
+            renderCalendar();
+        }
+
+        function renderCalendar() {
+            const grid = document.getElementById('calendar-grid');
+            grid.innerHTML = '';
+            document.getElementById('calendar-month').textContent = `${calendarYear} 年 ${calendarMonth} 月`;
+            const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
+            const firstDayIndex = (new Date(calendarYear, calendarMonth - 1, 1).getDay() + 6) % 7;
+            const monthPrefix = `${calendarYear}-${String(calendarMonth).padStart(2, '0')}`;
+
+            for (let i = 0; i < firstDayIndex; i++) {
+                grid.appendChild(Object.assign(document.createElement('div'), { className: "h-16 bg-neutral-950/30 rounded-lg border border-neutral-900" }));
+            }
+
+            for (let d = 1; d <= daysInMonth; d++) {
+                const dayStr = `${monthPrefix}-${String(d).padStart(2, '0')}`;
+                const cellData = appData[dayStr];
+                const report = cellData?.committed ? cellData.report : null;
+                const cell = document.createElement('button');
+                cell.type = 'button';
+                cell.setAttribute('aria-label', dayStr);
+                let bgClass = "bg-neutral-950 hover:border-neutral-700";
+                let statusDot = "";
+
+                if (report) {
+                    const def = report.actualDeficit;
+                    const targetDef = report.targetDeficit || 1140;
+                    if (def >= targetDef) {
+                        bgClass = "bg-emerald-950/40 border-emerald-800/80 hover:border-emerald-700";
+                        statusDot = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>`;
+                    } else if (def >= 0) {
+                        bgClass = "bg-amber-950/30 border-amber-800/80 hover:border-amber-700";
+                        statusDot = `<span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>`;
+                    } else {
+                        bgClass = "bg-rose-950/30 border-rose-800/80 hover:border-rose-700";
+                        statusDot = `<span class="w-1.5 h-1.5 rounded-full bg-rose-500"></span>`;
+                    }
+                }
+
+                cell.className = `h-16 rounded-lg border p-1.5 flex flex-col justify-between transition cursor-pointer ${bgClass}`;
+                cell.innerHTML = `
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="${dayStr === currentDateStr ? 'text-white font-bold underline' : 'text-neutral-400'}">${d}</span>
+                        ${statusDot}
+                    </div>
+                    ${report ? `<span class="text-[10px] font-bold ${report.actualDeficit < 0 ? 'text-rose-400' : 'text-amber-400'}">${report.actualDeficit > 0 ? '−' : report.actualDeficit < 0 ? '+' : ''}${Math.abs(Math.round(report.actualDeficit))}</span>` : ''}
+                `;
+                cell.onclick = () => openDayModal(dayStr);
+                grid.appendChild(cell);
+            }
+        }
+
+        function openDayModal(dateStr) {
+            const cellData = appData[dateStr];
+            document.getElementById('modal-date-title').innerText = `${dateStr} 日期详情`;
+            const content = document.getElementById('modal-content');
+            if (!cellData || !cellData.committed || !cellData.report) {
+                content.innerHTML = `<div class="text-neutral-500 italic">该日期暂无入账记录或未锁定。</div>`;
+            } else {
+                const rep = cellData.report;
+                content.innerHTML = `
+                    <div class="space-y-2">
+                        <div class="text-white font-medium">训练类型: ${trainingConfigs[cellData.trainingType || 'rest'].name}</div>
+                        <div>当日总消耗 ${roundNutrient(rep.tdee)} kcal</div>
+                        <div>实际摄入热量 ${roundNutrient(rep.ingCal)} kcal</div>
+                        <div class="text-amber-400 font-bold">${formatEnergyBalance(rep.actualDeficit)}</div>
+                        ${Number.isFinite(rep.steps) ? `<div>当天步数 ${rep.steps.toLocaleString('zh-CN')} 步</div>` : ''}
+                        <div class="text-emerald-400">预计减重速度: 约 ${rep.weeklyLossKg} 公斤/周</div>
+                        <div class="pt-2 border-t border-neutral-800 text-neutral-400">
+                            营养素: 蛋白质 ${Math.round(rep.protein)}g | 碳水 ${Math.round(rep.carbs)}g | 脂肪 ${Math.round(rep.fat)}g
+                        </div>
+                    </div>
+                `;
+            }
+            document.getElementById('history-modal').classList.remove('hidden');
+        }
+
+        function closeModal() { document.getElementById('history-modal').classList.add('hidden'); }
+        function saveData() { localStorage.setItem('calorie_tracker_data', JSON.stringify(appData)); }
+    </script>
+</body>
+</html>

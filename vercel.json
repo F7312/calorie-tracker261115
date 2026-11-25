@@ -1,0 +1,26 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "",
+  "buildCommand": "",
+  "outputDirectory": "public",
+  "functions": {
+    "api/access.mjs": {
+      "includeFiles": "{public/login.html,site/tracker.html}"
+    },
+    "api/analyze-meal.mjs": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    { "source": "/", "destination": "/api/access" },
+    { "source": "/index.html", "destination": "/api/access" }
+  ],
+  "redirects": [
+    {
+      "source": "/gemini-code-1794723615158.html",
+      "destination": "/",
+      "permanent": false
+    }
+  ]
+}
